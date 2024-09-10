@@ -106,24 +106,20 @@
                 },
                 body: JSON.stringify(order),
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to place order');
+                }
+                return response.json();
+            })
             .then(data => {
                 console.log('Order response:', JSON.stringify(data, null, 2));
-                let orderSummary = `
-                    <h2>Order Placed Successfully</h2>
-                    <p>Order ID: ${data.id}</p>
-                    <p>Customer Name: ${data.customerName}</p>
-                    <p>Total Amount: $${data.totalAmount.toFixed(2)}</p>
-                    <h3>Order Items:</h3>
-                    <ul>
-                `;
-                
-                data.items.forEach(item => {
-                    orderSummary += `<li>${item.productName} - Quantity: ${item.quantity}, Price: $${item.price.toFixed(2)}</li>`;
-                });
-                
-                orderSummary += '</ul>';
-                document.getElementById('orderSummary').innerHTML = orderSummary;
+                // Make sure 'orderId' is used here, not 'id'
+                if (data.orderId) {
+                    window.location.href = `/order-details.html?id=${data.orderId}`;
+                } else {
+                    throw new Error('Order ID not received from server');
+                }
             })
             .catch((error) => {
                 console.error('Error:', error);

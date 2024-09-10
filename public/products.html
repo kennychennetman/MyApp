@@ -76,7 +76,8 @@
     
     <h2>Add/Update Product</h2>
     <form id="productForm">
-        <input type="text" id="name" name="name" placeholder="Product Name" required>
+        <input type="text" id="name" name="name" placeholder="Product Name" list="productList" required>
+        <datalist id="productList"></datalist>
         <input type="number" id="price" name="price" step="0.01" placeholder="Price" required>
         <input type="number" id="stock" name="stock" placeholder="Stock" required>
         <button type="submit">Add/Update Product</button>
@@ -84,39 +85,75 @@
     
     <h2>Remove Product</h2>
     <form id="removeProductForm">
-        <select id="productSelect" name="productId" required>
+        <select id="removeSelect" name="productId" required>
             <option value="">Select a product to remove</option>
         </select>
-        <button type="submit" class="remove-button">Remove Product</button>
+        <button type="submit">Remove Product</button>
     </form>
 
     <div id="message"></div>
-    <div id="confirmationMessage">
-        Product added successfully!
-        <button id="confirmButton">OK</button>
-    </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const productForm = document.getElementById('productForm');
-            const message = document.getElementById('message');
-            const confirmationMessage = document.getElementById('confirmationMessage');
-            const confirmButton = document.getElementById('confirmButton');
             const removeProductForm = document.getElementById('removeProductForm');
-            const productSelect = document.getElementById('productSelect');
+            const nameInput = document.getElementById('name');
+            const priceInput = document.getElementById('price');
+            const stockInput = document.getElementById('stock');
+            const productList = document.getElementById('productList');
+            const removeSelect = document.getElementById('removeSelect');
+            const message = document.getElementById('message');
+
+            let products = [];
+
+            async function populateProductList() {
+                try {
+                    const response = await fetch('/products');
+                    products = await response.json();
+                    
+                    productList.innerHTML = '';
+                    removeSelect.innerHTML = '<option value="">Select a product to remove</option>';
+                    products.forEach(product => {
+                        const option = document.createElement('option');
+                        option.value = product.Name;
+                        option.textContent = `${product.Name} - $${product.Price.toFixed(2)} - Stock: ${product.Stock}`;
+                        productList.appendChild(option.cloneNode(true));
+                        removeSelect.appendChild(option);
+                    });
+                } catch (error) {
+                    console.error('Error fetching products:', error);
+                }
+            }
+
+            nameInput.addEventListener('input', function() {
+                const selectedProduct = products.find(p => p.Name.toLowerCase() === this.value.trim().toLowerCase());
+                if (selectedProduct) {
+                    priceInput.value = selectedProduct.Price.toFixed(2);
+                    stockInput.value = selectedProduct.Stock;
+                } else {
+                    priceInput.value = '';
+                    stockInput.value = '';
+                }
+            });
 
             productForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 
-                const name = document.getElementById('name').value;
-                const price = document.getElementById('price').value;
-                const stock = document.getElementById('stock').value;
+                const name = nameInput.value.trim();
+                const price = priceInput.value;
+                const stock = stockInput.value;
                 
+                if (!name || !price || !stock) {
+                    message.textContent = 'Please fill in all fields';
+                    message.style.color = 'red';
+                    return;
+                }
+
                 const data = { name, price, stock };
                 console.log('Sending data:', data);
 
                 try {
-                    const response = await fetch('/add-product', {
+                    const response = await fetch('/products', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -124,65 +161,52 @@
                         body: JSON.stringify(data),
                     });
 
-                    console.log('Response status:', response.status);
-                    console.log('Response headers:', response.headers);
-
-                    const responseText = await response.text();
-                    console.log('Response text:', responseText);
-
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
 
-                    const result = JSON.parse(responseText);
+                    const result = await response.json();
 
-                    if (!result.success) {
-                        throw new Error(result.error || 'Unknown error occurred');
-                    }
-
-                    message.textContent = '';
-                    confirmationMessage.style.display = 'block';
+                    message.textContent = result.message || 'Product added/updated successfully!';
+                    message.style.color = 'green';
                     this.reset();
-                    startRedirectTimer();
+                    await populateProductList();
                 } catch (error) {
                     console.error('Error:', error);
                     message.textContent = 'Error: ' + error.message;
                     message.style.color = 'red';
                 }
-            });
-
-            confirmButton.addEventListener('click', function() {
-                confirmationMessage.style.display = 'none';
             });
 
             removeProductForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 
-                const productId = productSelect.value;
-                if (!productId) {
-                    message.textContent = 'Please select a product to remove.';
+                const productName = removeSelect.value;
+                if (!productName) {
+                    message.textContent = 'Please select a product to remove';
                     message.style.color = 'red';
                     return;
                 }
 
                 try {
-                    const response = await fetch('/remove-product', {
+                    const response = await fetch('/products/remove-product', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({ id: productId }),
+                        body: JSON.stringify({ name: productName }),
                     });
 
                     const result = await response.json();
 
-                    if (!result.success) {
+                    if (!response.ok) {
                         throw new Error(result.error || 'Unknown error occurred');
                     }
 
-                    message.textContent = 'Product removed successfully!';
+                    message.textContent = result.message || 'Product removed successfully!';
                     message.style.color = 'green';
-                    populateProductList(); // Refresh the product list
+                    removeSelect.value = '';
+                    await populateProductList();
                 } catch (error) {
                     console.error('Error:', error);
                     message.textContent = 'Error: ' + error.message;
@@ -190,61 +214,8 @@
                 }
             });
 
-            function startRedirectTimer() {
-                let seconds = 5;
-                const interval = setInterval(() => {
-                    seconds--;
-                    if (seconds <= 0) {
-                        clearInterval(interval);
-                        confirmationMessage.style.display = 'none';
-                    }
-                }, 1000);
-            }
-
-            // Function to fetch and populate the product list
-            async function populateProductList() {
-                try {
-                    const response = await fetch('/products');
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    const products = await response.json();
-                    
-                    productSelect.innerHTML = '<option value="">Select a product to remove</option>';
-                    products.forEach(product => {
-                        const option = document.createElement('option');
-                        option.value = product.Id; // Make sure this matches the column name from SQL
-                        option.textContent = `${product.Name} - $${product.Price.toFixed(2)} (Stock: ${product.Stock})`;
-                        productSelect.appendChild(option);
-                    });
-                } catch (error) {
-                    console.error('Error fetching products:', error);
-                    message.textContent = `Error fetching products: ${error.message}. Please try again.`;
-                    message.style.color = 'red';
-                }
-            }
-
-            // Call populateProductList when the page loads
+            // Initial population of product list
             populateProductList();
-
-            function fetchProducts() {
-                fetch('/products')  // Changed from '/get-products' to '/products'
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(products => {
-                        // ... handle the products ...
-                    })
-                    .catch(error => {
-                        console.error('Error fetching products:', error);
-                        document.getElementById('message').textContent = `Error fetching products: ${error.message}. Please try again.`;
-                    });
-            }
-
-            // ... other code ...
         });
     </script>
 </body>

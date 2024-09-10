@@ -83,8 +83,13 @@ router.post('/', async (req, res) => {
             };
             console.log('Sending response:', JSON.stringify(responseData, null, 2));
 
-            // Send back the complete order information
-            res.json(responseData);
+            // Make sure to send the orderId in the response
+            res.status(201).json({
+                message: 'Order created successfully',
+                orderId: orderId, // Make sure this is the correct variable name for your order ID
+                totalAmount: totalAmount,
+                items: orderItems
+            });
         } catch (err) {
             // If there's an error, roll back the transaction
             await transaction.rollback();
@@ -97,6 +102,49 @@ router.post('/', async (req, res) => {
         if (connection) {
             await connection.close();
         }
+    }
+});
+
+router.get('/:id', async (req, res) => {
+    console.log(`Fetching order details for ID: ${req.params.id}`);
+    try {
+        await sql.connect(config);
+        const result = await sql.query`
+            SELECT o.ID, o.CustomerName, o.OrderDate, o.TotalAmount,
+                   oi.ProductId, oi.Quantity, p.Name as ProductName, p.Price
+            FROM Orders o
+            JOIN OrderItems oi ON o.ID = oi.OrderId
+            JOIN Products p ON oi.ProductId = p.ID
+            WHERE o.ID = ${req.params.id}
+        `;
+        console.log('Query result:', JSON.stringify(result.recordset, null, 2));
+        
+        if (result.recordset.length === 0) {
+            console.log(`No order found for ID: ${req.params.id}`);
+            return res.status(404).json({ error: 'Order not found' });
+        }
+        
+        // Process the result to group items under the order
+        const order = {
+            id: result.recordset[0].ID,
+            customerName: result.recordset[0].CustomerName,
+            orderDate: result.recordset[0].OrderDate,
+            totalAmount: result.recordset[0].TotalAmount,
+            items: result.recordset.map(item => ({
+                productId: item.ProductId,
+                productName: item.ProductName,
+                quantity: item.Quantity,
+                price: item.Price
+            }))
+        };
+        
+        console.log('Sending order details:', JSON.stringify(order, null, 2));
+        res.json(order);
+    } catch (err) {
+        console.error('Error fetching order:', err);
+        res.status(500).json({ error: 'Server error', details: err.message });
+    } finally {
+        await sql.close();
     }
 });
 
