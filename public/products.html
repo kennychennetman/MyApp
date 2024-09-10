@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1, h2 {
+            align-self: flex-start;
+            width: 100%;
+        }
+        #productForm, #removeProductForm {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+            gap: 10px;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+        #productForm input {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        #productForm button {
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #message {
+            margin-bottom: 10px;
+        }
+        #confirmationMessage {
+            display: none;
+            background-color: #dff0d8;
+            border: 1px solid #d6e9c6;
+            color: #3c763d;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        h2 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        #removeProductForm select {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        
+        .remove-button {
+            padding: 5px 10px;
+            background-color: #d9534f;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Product Management</h1>
+    
+    <h2>Add/Update Product</h2>
+    <form id="productForm">
+        <input type="text" id="name" name="name" placeholder="Product Name" required>
+        <input type="number" id="price" name="price" step="0.01" placeholder="Price" required>
+        <input type="number" id="stock" name="stock" placeholder="Stock" required>
+        <button type="submit">Add/Update Product</button>
+    </form>
+    
+    <h2>Remove Product</h2>
+    <form id="removeProductForm">
+        <select id="productSelect" name="productId" required>
+            <option value="">Select a product to remove</option>
+        </select>
+        <button type="submit" class="remove-button">Remove Product</button>
+    </form>
+
+    <div id="message"></div>
+    <div id="confirmationMessage">
+        Product added successfully!
+        <button id="confirmButton">OK</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const productForm = document.getElementById('productForm');
+            const message = document.getElementById('message');
+            const confirmationMessage = document.getElementById('confirmationMessage');
+            const confirmButton = document.getElementById('confirmButton');
+            const removeProductForm = document.getElementById('removeProductForm');
+            const productSelect = document.getElementById('productSelect');
+
+            productForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const name = document.getElementById('name').value;
+                const price = document.getElementById('price').value;
+                const stock = document.getElementById('stock').value;
+                
+                const data = { name, price, stock };
+                console.log('Sending data:', data);
+
+                try {
+                    const response = await fetch('/add-product', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data),
+                    });
+
+                    console.log('Response status:', response.status);
+                    console.log('Response headers:', response.headers);
+
+                    const responseText = await response.text();
+                    console.log('Response text:', responseText);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const result = JSON.parse(responseText);
+
+                    if (!result.success) {
+                        throw new Error(result.error || 'Unknown error occurred');
+                    }
+
+                    message.textContent = '';
+                    confirmationMessage.style.display = 'block';
+                    this.reset();
+                    startRedirectTimer();
+                } catch (error) {
+                    console.error('Error:', error);
+                    message.textContent = 'Error: ' + error.message;
+                    message.style.color = 'red';
+                }
+            });
+
+            confirmButton.addEventListener('click', function() {
+                confirmationMessage.style.display = 'none';
+            });
+
+            removeProductForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const productId = productSelect.value;
+                if (!productId) {
+                    message.textContent = 'Please select a product to remove.';
+                    message.style.color = 'red';
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/remove-product', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ id: productId }),
+                    });
+
+                    const result = await response.json();
+
+                    if (!result.success) {
+                        throw new Error(result.error || 'Unknown error occurred');
+                    }
+
+                    message.textContent = 'Product removed successfully!';
+                    message.style.color = 'green';
+                    populateProductList(); // Refresh the product list
+                } catch (error) {
+                    console.error('Error:', error);
+                    message.textContent = 'Error: ' + error.message;
+                    message.style.color = 'red';
+                }
+            });
+
+            function startRedirectTimer() {
+                let seconds = 5;
+                const interval = setInterval(() => {
+                    seconds--;
+                    if (seconds <= 0) {
+                        clearInterval(interval);
+                        confirmationMessage.style.display = 'none';
+                    }
+                }, 1000);
+            }
+
+            // Function to fetch and populate the product list
+            async function populateProductList() {
+                try {
+                    const response = await fetch('/products');
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const products = await response.json();
+                    
+                    productSelect.innerHTML = '<option value="">Select a product to remove</option>';
+                    products.forEach(product => {
+                        const option = document.createElement('option');
+                        option.value = product.Id; // Make sure this matches the column name from SQL
+                        option.textContent = `${product.Name} - $${product.Price.toFixed(2)} (Stock: ${product.Stock})`;
+                        productSelect.appendChild(option);
+                    });
+                } catch (error) {
+                    console.error('Error fetching products:', error);
+                    message.textContent = `Error fetching products: ${error.message}. Please try again.`;
+                    message.style.color = 'red';
+                }
+            }
+
+            // Call populateProductList when the page loads
+            populateProductList();
+
+            function fetchProducts() {
+                fetch('/products')  // Changed from '/get-products' to '/products'
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(products => {
+                        // ... handle the products ...
+                    })
+                    .catch(error => {
+                        console.error('Error fetching products:', error);
+                        document.getElementById('message').textContent = `Error fetching products: ${error.message}. Please try again.`;
+                    });
+            }
+
+            // ... other code ...
+        });
+    </script>
+</body>
+</html>
