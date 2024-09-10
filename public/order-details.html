@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Details</title>
+    <style>
+        /* Add your styles here */
+    </style>
+</head>
+<body>
+    <h1>Order Details</h1>
+    <div id="orderDetails"></div>
+    <button id="returnButton">Return to Order Form</button>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const orderId = urlParams.get('id');
+
+            if (!orderId) {
+                document.getElementById('orderDetails').innerHTML = '<p>Error: No order ID provided. Please return to the order form and try again.</p>';
+                return;
+            }
+
+            try {
+                console.log(`Fetching order details for ID: ${orderId}`);
+                const response = await fetch(`/orders/${orderId}`);
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Error response:', errorText);
+                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                }
+
+                const orderData = await response.json();
+                console.log('Received order data:', JSON.stringify(orderData, null, 2));
+                displayOrderDetails(orderData);
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('orderDetails').innerHTML = `<p>An error occurred while fetching order details: ${error.message}</p>`;
+            }
+
+            document.getElementById('returnButton').addEventListener('click', () => {
+                window.location.href = '/order_form.html';
+            });
+        });
+
+        function displayOrderDetails(orderData) {
+            const detailsDiv = document.getElementById('orderDetails');
+            
+            let html = `
+                <h2>Order #${orderData.id}</h2>
+                <p>Customer: ${orderData.customerName}</p>
+                <p>Date: ${new Date(orderData.orderDate).toLocaleString()}</p>
+                <p>Total Amount: $${orderData.totalAmount.toFixed(2)}</p>
+                <h3>Items:</h3>
+                <ul>
+            `;
+
+            orderData.items.forEach(item => {
+                html += `
+                    <li>${item.productName} - Quantity: ${item.quantity}, Price: $${item.price.toFixed(2)}</li>
+                `;
+            });
+
+            html += '</ul>';
+            detailsDiv.innerHTML = html;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Place Order</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        form { display: flex; flex-direction: column; gap: 10px; }
+        .product-row { display: flex; gap: 10px; align-items: center; }
+        button { margin-top: 10px; padding: 5px 10px; }
+        .warning { color: red; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <h1>Place Order</h1>
+    <form id="orderForm">
+        <label for="customerName">Customer Name:</label>
+        <input type="text" id="customerName" name="customerName" required>
+
+        <h2>Order Items</h2>
+        <div id="orderItems">
+            <!-- Product rows will be dynamically added here -->
+        </div>
+
+        <button type="button" id="addProduct">Add Product</button>
+        <button type="submit" id="submitOrder">Place Order</button>
+    </form>
+
+    <div id="orderSummary"></div>
+
+    <script>
+        let products = [];
+
+        function fetchProducts() {
+            fetch('/products')
+                .then(response => response.json())
+                .then(data => {
+                    products = data;
+                    console.log('Fetched products:', products);
+                    addProductRow();
+                })
+                .catch(error => {
+                    console.error('Error fetching products:', error);
+                });
+        }
+
+        function addProductRow() {
+            const orderItems = document.getElementById('orderItems');
+            const row = document.createElement('div');
+            row.className = 'product-row';
+            row.innerHTML = `
+                <select name="productId" required>
+                    <option value="">Select a product</option>
+                    ${products.map(p => `<option value="${p.ID}">${p.Name} - $${p.Price.toFixed(2)} (Stock: ${p.Stock})</option>`).join('')}
+                </select>
+                <input type="number" name="quantity" min="1" value="1" required>
+                <button type="button" class="removeButton" onclick="removeProductRow(this)">Remove</button>
+                <span class="warning"></span>
+            `;
+            orderItems.appendChild(row);
+
+            updateRemoveButtons();
+        }
+
+        function removeProductRow(button) {
+            button.closest('.product-row').remove();
+            updateRemoveButtons();
+        }
+
+        function updateRemoveButtons() {
+            const removeButtons = document.querySelectorAll('.removeButton');
+            const productRows = document.querySelectorAll('.product-row');
+            
+            removeButtons.forEach(button => {
+                button.disabled = productRows.length <= 1;
+            });
+        }
+
+        document.getElementById('addProduct').addEventListener('click', addProductRow);
+
+        document.getElementById('orderForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const order = {
+                customerName: formData.get('customerName'),
+                items: []
+            };
+
+            const productRows = document.querySelectorAll('.product-row');
+            productRows.forEach(row => {
+                const productId = row.querySelector('[name="productId"]').value;
+                const quantity = parseInt(row.querySelector('[name="quantity"]').value);
+                if (productId && quantity) {
+                    order.items.push({ productId: parseInt(productId), quantity });
+                }
+            });
+
+            console.log('Sending order:', JSON.stringify(order, null, 2));
+
+            fetch('/orders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(order),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to place order');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Order response:', JSON.stringify(data, null, 2));
+                // Make sure 'orderId' is used here, not 'id'
+                if (data.orderId) {
+                    window.location.href = `/order-details.html?id=${data.orderId}`;
+                } else {
+                    throw new Error('Order ID not received from server');
+                }
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+                document.getElementById('orderSummary').innerHTML = '<p>Error placing order. Please try again.</p>';
+            });
+        });
+
+        fetchProducts();
+    </script>
+</body>
+</html>
